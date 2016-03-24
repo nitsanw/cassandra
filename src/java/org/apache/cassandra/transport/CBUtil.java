@@ -25,6 +25,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,7 +58,7 @@ public abstract class CBUtil
 
     private CBUtil() {}
 
-    private final static ThreadLocal<CharsetDecoder> decoder = new ThreadLocal<CharsetDecoder>()
+    private final static ThreadLocal<CharsetDecoder> TL_UTF8_DECODER = new ThreadLocal<CharsetDecoder>()
     {
         @Override
         protected CharsetDecoder initialValue()
@@ -65,6 +66,17 @@ public abstract class CBUtil
             return Charset.forName("UTF-8").newDecoder();
         }
     };
+
+    private final static ThreadLocal<CharsetEncoder> TL_UTF8_ENCODER = new ThreadLocal<CharsetEncoder>()
+    {
+        @Override
+        protected CharsetEncoder initialValue()
+        {
+            return Charset.forName("UTF-8").newEncoder();
+        }
+    };
+    private final static ThreadLocal<CharBuffer> TL_CHAR_BUFFER = new ThreadLocal<CharBuffer>();
+    private final static ThreadLocal<ByteBuffer> TL_BYTE_BUFFER = new ThreadLocal<ByteBuffer>();
 
     private static String readString(ByteBuf cb, int length)
     {
@@ -96,35 +108,73 @@ public abstract class CBUtil
             throw new ProtocolException("Not enough bytes to read an UTF8 serialized string preceded by its 2 bytes length");
         }
     }
-
     // Taken from Netty's ChannelBuffers.decodeString(). We need to use our own decoder to properly handle invalid
     // UTF-8 sequences.  See CASSANDRA-8101 for more details.  This can be removed once https://github.com/netty/netty/pull/2999
     // is resolved in a release used by Cassandra.
     private static String decodeString(ByteBuffer src) throws CharacterCodingException
     {
         // the decoder needs to be reset every time we use it, hence the copy per thread
-        CharsetDecoder theDecoder = decoder.get();
+        CharsetDecoder theDecoder = TL_UTF8_DECODER.get();
         theDecoder.reset();
-
-        final CharBuffer dst = CharBuffer.allocate(
-                (int) ((double) src.remaining() * theDecoder.maxCharsPerByte()));
-
+        CharBuffer dst = TL_CHAR_BUFFER.get();
+        int capacity = (int) ((double) src.remaining() * theDecoder.maxCharsPerByte());
+        if (dst == null) {
+            capacity = Math.max(capacity, 4096);
+            dst = CharBuffer.allocate(capacity);
+        }
+        else {
+            dst.clear();
+            if (dst.capacity() < capacity){
+                dst = CharBuffer.allocate(capacity);
+            }
+        }
         CoderResult cr = theDecoder.decode(src, dst, true);
         if (!cr.isUnderflow())
             cr.throwException();
-
-        cr = theDecoder.flush(dst);
-        if (!cr.isUnderflow())
-            cr.throwException();
+// no point for UTF-8
+//        cr = theDecoder.flush(dst);
+//        if (!cr.isUnderflow())
+//            cr.throwException();
 
         return dst.flip().toString();
     }
 
     public static void writeString(String str, ByteBuf cb)
     {
-        byte[] bytes = str.getBytes(CharsetUtil.UTF_8);
-        cb.writeShort(bytes.length);
-        cb.writeBytes(bytes);
+        int length = str.length();
+
+        CharBuffer src = CharBuffer.wrap(str);
+        ByteBuffer dst = TL_BYTE_BUFFER.get();
+        CharsetEncoder charsetEncoder = TL_UTF8_ENCODER.get();
+        int estimatedDstCapacity = (int) (length * charsetEncoder.maxBytesPerChar());
+        if (dst == null) {
+            int capacity = (int) Math.max(4096 * charsetEncoder.maxBytesPerChar(), estimatedDstCapacity);
+            dst = ByteBuffer.allocate(capacity);
+            TL_BYTE_BUFFER.set(dst);
+        }
+        else {
+            dst.clear();
+            if (dst.capacity() < estimatedDstCapacity) {
+                dst = ByteBuffer.allocate(estimatedDstCapacity);
+                TL_BYTE_BUFFER.set(dst);
+            }
+        }
+        CoderResult result = charsetEncoder.encode(src, dst, true);
+        if(result.isError())
+        {
+            // note that this is also a possible outcome of String.getBytes()
+            try
+            {
+                result.throwException();
+            }
+            catch (CharacterCodingException x)
+            {
+                throw new Error(x);
+            }
+        }
+        dst.flip();
+        cb.writeShort(dst.limit());
+        cb.writeBytes(dst.array(), 0, dst.limit());
     }
 
     public static int sizeOfString(String str)

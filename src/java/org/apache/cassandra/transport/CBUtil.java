@@ -126,6 +126,7 @@ public abstract class CBUtil
             dst.clear();
             if (dst.capacity() < capacity){
                 dst = CharBuffer.allocate(capacity);
+                TL_CHAR_BUFFER.set(dst);
             }
         }
         CoderResult cr = theDecoder.decode(src, dst, true);

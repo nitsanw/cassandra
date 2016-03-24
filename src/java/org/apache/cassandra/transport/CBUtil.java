@@ -121,6 +121,7 @@ public abstract class CBUtil
         if (dst == null) {
             capacity = Math.max(capacity, 4096);
             dst = CharBuffer.allocate(capacity);
+            TL_CHAR_BUFFER.set(dst);
         }
         else {
             dst.clear();

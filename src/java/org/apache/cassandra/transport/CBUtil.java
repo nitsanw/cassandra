@@ -133,50 +133,16 @@ public abstract class CBUtil
         CoderResult cr = theDecoder.decode(src, dst, true);
         if (!cr.isUnderflow())
             cr.throwException();
-// no point for UTF-8
-//        cr = theDecoder.flush(dst);
-//        if (!cr.isUnderflow())
-//            cr.throwException();
 
         return dst.flip().toString();
     }
 
     public static void writeString(String str, ByteBuf cb)
     {
-        int length = str.length();
-
-        CharBuffer src = CharBuffer.wrap(str);
-        ByteBuffer dst = TL_BYTE_BUFFER.get();
-        CharsetEncoder charsetEncoder = TL_UTF8_ENCODER.get();
-        int estimatedDstCapacity = (int) (length * charsetEncoder.maxBytesPerChar());
-        if (dst == null) {
-            int capacity = (int) Math.max(4096 * charsetEncoder.maxBytesPerChar(), estimatedDstCapacity);
-            dst = ByteBuffer.allocate(capacity);
-            TL_BYTE_BUFFER.set(dst);
-        }
-        else {
-            dst.clear();
-            if (dst.capacity() < estimatedDstCapacity) {
-                dst = ByteBuffer.allocate(estimatedDstCapacity);
-                TL_BYTE_BUFFER.set(dst);
-            }
-        }
-        CoderResult result = charsetEncoder.encode(src, dst, true);
-        if(result.isError())
-        {
-            // note that this is also a possible outcome of String.getBytes()
-            try
-            {
-                result.throwException();
-            }
-            catch (CharacterCodingException x)
-            {
-                throw new Error(x);
-            }
-        }
-        dst.flip();
-        cb.writeShort(dst.limit());
-        cb.writeBytes(dst.array(), 0, dst.limit());
+        int writerIndex = cb.writerIndex();
+        cb.writeShort(0);
+        int lengthBytes = ByteBufUtilTemp.writeUtf8(cb, str);
+        cb.setShort(writerIndex, lengthBytes);
     }
 
     public static int sizeOfString(String str)

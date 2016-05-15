@@ -1,6 +1,6 @@
 package org.apache.cassandra.stress.util;
 /*
- * 
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,41 +8,40 @@ package org.apache.cassandra.stress.util;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
+ *
  */
 
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ThreadLocalRandom;
+
+import org.HdrHistogram.Histogram;
 
 // a timer - this timer must be used by a single thread, and co-ordinates with other timers by
 public final class Timer
 {
-    private ThreadLocalRandom rnd;
+    private final Histogram responseTime = new Histogram(3);
+    private final Histogram serviceTime = new Histogram(3);
+    private final Histogram waitTime = new Histogram(3);
 
-    // in progress snap start
-    private long sampleStartNanos;
+    // event timing info
+    private long intendedTimeNs;
+    private long startTimeNs;
+    private long endTimeNs;
 
-    // each entry is present with probability 1/p(opCount) or 1/(p(opCount)-1)
-    private final long[] sample;
-    private int opCount;
 
     // aggregate info
     private long errorCount;
     private long partitionCount;
     private long rowCount;
-    private long total;
     private long max;
     private long maxStart;
     private long upToDateAsOf;
@@ -53,25 +52,8 @@ public final class Timer
     volatile TimingInterval report;
     private volatile TimingInterval finalReport;
 
-    public Timer(int sampleCount)
+    public Timer()
     {
-        int powerOf2 = 32 - Integer.numberOfLeadingZeros(sampleCount - 1);
-        this.sample = new long[1 << powerOf2];
-    }
-
-    public void init()
-    {
-        rnd = ThreadLocalRandom.current();
-    }
-
-    public void start(){
-        // decide if we're logging this event
-        sampleStartNanos = System.nanoTime();
-    }
-
-    private int p(int index)
-    {
-        return 1 + (index / sample.length);
     }
 
     public boolean running()
@@ -81,46 +63,49 @@ public final class Timer
 
     public void stop(long partitionCount, long rowCount, boolean error)
     {
+        endTimeNs = System.nanoTime();
         maybeReport();
         long now = System.nanoTime();
-        long time = now - sampleStartNanos;
-        if (rnd.nextInt(p(opCount)) == 0)
-            sample[index(opCount)] = time;
-        if (time > max)
+        if (intendedTimeNs != 0)
         {
-            maxStart = sampleStartNanos;
-            max = time;
+            long rTime = endTimeNs - intendedTimeNs;
+            responseTime.recordValue(rTime);
+            long wTime = intendedTimeNs - startTimeNs;
+            waitTime.recordValue(wTime);
         }
-        total += time;
-        opCount += 1;
+
+        long sTime = endTimeNs - startTimeNs;
+        serviceTime.recordValue(sTime);
+
+        if (sTime > max)
+        {
+            maxStart = startTimeNs;
+            max = sTime;
+        }
         this.partitionCount += partitionCount;
         this.rowCount += rowCount;
         if (error)
             this.errorCount++;
         upToDateAsOf = now;
+        resetTimes();
     }
 
-    private int index(int count)
+    private void resetTimes()
     {
-        return count & (sample.length - 1);
+        intendedTimeNs = startTimeNs = endTimeNs = 0;
     }
 
     private TimingInterval buildReport()
     {
-        final List<SampleOfLongs> sampleLatencies = Arrays.asList
-                (       new SampleOfLongs(Arrays.copyOf(sample, index(opCount)), p(opCount)),
-                        new SampleOfLongs(Arrays.copyOfRange(sample, index(opCount), Math.min(opCount, sample.length)), p(opCount) - 1)
-                );
-        final TimingInterval report = new TimingInterval(lastSnap, upToDateAsOf, max, maxStart, max, partitionCount,
-                rowCount, total, opCount, errorCount, SampleOfLongs.merge(rnd, sampleLatencies, Integer.MAX_VALUE));
+        final TimingInterval report = new TimingInterval(lastSnap, upToDateAsOf, maxStart, partitionCount,
+                rowCount, errorCount, responseTime, serviceTime, waitTime);
         // reset counters
-        opCount = 0;
         partitionCount = 0;
         rowCount = 0;
-        total = 0;
         max = 0;
         errorCount = 0;
         lastSnap = upToDateAsOf;
+
         return report;
     }
 
@@ -163,5 +148,15 @@ public final class Timer
             reportRequest.countDown();
             reportRequest = null;
         }
+    }
+
+    public void intendedTimeNs(long v)
+    {
+        intendedTimeNs = v;
+    }
+
+    public void start()
+    {
+        startTimeNs = System.nanoTime();
     }
 }

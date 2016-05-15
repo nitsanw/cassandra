@@ -1,6 +1,6 @@
 package org.apache.cassandra.stress;
 /*
- * 
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,16 +8,16 @@ package org.apache.cassandra.stress;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
+ *
  */
 
 
@@ -159,7 +159,7 @@ public class StressMetrics
         TimingInterval current = result.intervals.combine(settings.samples.reportCount);
         TimingInterval history = timing.getHistory().combine(settings.samples.historyCount);
         rowRateUncertainty.update(current.adjustedRowRate());
-        if (current.operationCount != 0)
+        if (current.operationCount() != 0)
         {
             if (result.intervals.intervals().size() > 1)
             {
@@ -190,17 +190,17 @@ public class StressMetrics
     {
         output.println(prefix + String.format(ROWFORMAT,
                 type + ",",
-                total.operationCount,
+                total.operationCount(),
                 interval.opRate(),
                 interval.partitionRate(),
                 interval.rowRate(),
-                interval.meanLatency(),
-                interval.medianLatency(),
-                interval.rankLatency(0.95f),
-                interval.rankLatency(0.99f),
-                interval.rankLatency(0.999f),
-                interval.maxLatency(),
-                total.runTime() / 1000f,
+                interval.meanLatencyMs(),
+                interval.medianLatencyMs(),
+                interval.latencyAtPercentileMs(95.0),
+                interval.latencyAtPercentileMs(99.0),
+                interval.latencyAtPercentileMs(99.9),
+                interval.maxLatencyMs(),
+                total.runTimeMs() / 1000f,
                 opRateUncertainty.getUncertainty(),
                 interval.errorCount,
                 gcStats.count,
@@ -221,12 +221,12 @@ public class StressMetrics
         output.println(String.format("Op rate                   : %,8.0f op/s  %s", history.opRate(), opHistory.opRates()));
         output.println(String.format("Partition rate            : %,8.0f pk/s  %s", history.partitionRate(), opHistory.partitionRates()));
         output.println(String.format("Row rate                  : %,8.0f row/s %s", history.rowRate(), opHistory.rowRates()));
-        output.println(String.format("Latency mean              : %6.1f ms %s", history.meanLatency(), opHistory.meanLatencies()));
-        output.println(String.format("Latency median            : %6.1f ms %s", history.medianLatency(), opHistory.medianLatencies()));
-        output.println(String.format("Latency 95th percentile   : %6.1f ms %s", history.rankLatency(.95f), opHistory.rankLatencies(0.95f)));
-        output.println(String.format("Latency 99th percentile   : %6.1f ms %s", history.rankLatency(0.99f), opHistory.rankLatencies(0.99f)));
-        output.println(String.format("Latency 99.9th percentile : %6.1f ms %s", history.rankLatency(0.999f), opHistory.rankLatencies(0.999f)));
-        output.println(String.format("Latency max               : %6.1f ms %s", history.maxLatency(), opHistory.maxLatencies()));
+        output.println(String.format("Latency mean              : %6.1f ms %s", history.meanLatencyMs(), opHistory.meanLatencies()));
+        output.println(String.format("Latency median            : %6.1f ms %s", history.medianLatencyMs(), opHistory.medianLatencies()));
+        output.println(String.format("Latency 95th percentile   : %6.1f ms %s", history.latencyAtPercentileMs(95.0), opHistory.latenciesAtPercentile(95.0)));
+        output.println(String.format("Latency 99th percentile   : %6.1f ms %s", history.latencyAtPercentileMs(99.0), opHistory.latenciesAtPercentile(99.0)));
+        output.println(String.format("Latency 99.9th percentile : %6.1f ms %s", history.latencyAtPercentileMs(99.9), opHistory.latenciesAtPercentile(99.9)));
+        output.println(String.format("Latency max               : %6.1f ms %s", history.maxLatencyMs(), opHistory.maxLatencies()));
         output.println(String.format("Total partitions          : %,10d %s",   history.partitionCount, opHistory.partitionCounts()));
         output.println(String.format("Total errors              : %,10d %s",   history.errorCount, opHistory.errorCounts()));
         output.println(String.format("Total GC count            : %,1.0f", totalGcStats.count));
@@ -235,7 +235,7 @@ public class StressMetrics
         output.println(String.format("Avg GC time               : %,6.1f ms", totalGcStats.summs / totalGcStats.count));
         output.println(String.format("StdDev GC time            : %,6.1f ms", totalGcStats.sdvms));
         output.println("Total operation time      : " + DurationFormatUtils.formatDuration(
-                history.runTime(), "HH:mm:ss", true));
+                history.runTimeMs(), "HH:mm:ss", true));
         output.println(""); // Newline is important here to separate the aggregates section from the END or the next stress iteration
     }
 

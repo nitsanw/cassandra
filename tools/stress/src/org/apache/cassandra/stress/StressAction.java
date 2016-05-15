@@ -212,11 +212,9 @@ public class StressAction implements Runnable
 
         final CountDownLatch done = new CountDownLatch(threadCount);
         final Consumer[] consumers = new Consumer[threadCount];
-        int sampleCount = settings.samples.liveCount / threadCount;
         for (int i = 0; i < threadCount; i++)
         {
-
-            consumers[i] = new Consumer(operations.get(metrics.getTiming(), sampleCount, isWarmup),
+            consumers[i] = new Consumer(operations.get(metrics.getTiming(), isWarmup),
                                         done, workManager, metrics, rateLimiter);
         }
 
@@ -289,8 +287,6 @@ public class StressAction implements Runnable
 
         public void run()
         {
-            operations.initTimers();
-
             try
             {
                 SimpleClient sclient = null;

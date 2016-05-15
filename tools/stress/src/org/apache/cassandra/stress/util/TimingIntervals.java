@@ -50,10 +50,10 @@ public class TimingIntervals
 
     public String str(TimingInterval.TimingParameter value, String unit)
     {
-        return str(value, Float.NaN, unit);
+        return str(value, Double.NaN, unit);
     }
 
-    public String str(TimingInterval.TimingParameter value, float rank, String unit)
+    public String str(TimingInterval.TimingParameter value, double rank, String unit)
     {
         StringBuilder sb = new StringBuilder("[");
 
@@ -106,7 +106,7 @@ public class TimingIntervals
         return str(TimingInterval.TimingParameter.MEDIANLATENCY, "ms");
     }
 
-    public String rankLatencies(float rank)
+    public String latenciesAtPercentile(double rank)
     {
         return str(TimingInterval.TimingParameter.RANKLATENCY, rank, "ms");
     }

@@ -33,7 +33,7 @@ import org.apache.cassandra.transport.SimpleClient;
 public abstract class Operation
 {
     public final StressSettings settings;
-    public final Timer timer;
+    private final Timer timer;
 
     public Operation(Timer timer, StressSettings settings)
     {
@@ -72,7 +72,7 @@ public abstract class Operation
         throw new UnsupportedOperationException();
     }
 
-    public void timeWithRetry(RunOp run) throws IOException
+    public final void timeWithRetry(RunOp run) throws IOException
     {
         timer.start();
 
@@ -108,7 +108,6 @@ public abstract class Operation
                 exceptionMessage = getExceptionMessage(e);
             }
         }
-
         timer.stop(run.partitionCount(), run.rowCount(), !success);
 
         if (!success)
@@ -140,4 +139,8 @@ public abstract class Operation
             System.err.println(message);
     }
 
+    public void close()
+    {
+        timer.close();
+    }
 }

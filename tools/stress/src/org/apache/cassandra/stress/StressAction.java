@@ -25,16 +25,17 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.util.concurrent.RateLimiter;
-import com.google.common.util.concurrent.Uninterruptibles;
-
 import org.apache.cassandra.stress.operations.OpDistribution;
 import org.apache.cassandra.stress.operations.OpDistributionFactory;
+import org.apache.cassandra.stress.settings.ConnectionAPI;
 import org.apache.cassandra.stress.settings.SettingsCommand;
 import org.apache.cassandra.stress.settings.StressSettings;
 import org.apache.cassandra.stress.util.JavaDriverClient;
 import org.apache.cassandra.stress.util.ThriftClient;
 import org.apache.cassandra.transport.SimpleClient;
+
+import com.google.common.util.concurrent.RateLimiter;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 public class StressAction implements Runnable
 {
@@ -58,6 +59,7 @@ public class StressAction implements Runnable
 
         if (!settings.command.noWarmup)
             warmup(settings.command.getFactory(settings));
+
         if (settings.command.truncate == SettingsCommand.TruncateWhen.ONCE)
             settings.command.truncateTables(settings);
 
@@ -262,14 +264,43 @@ public class StressAction implements Runnable
         return metrics;
     }
 
+    private static class StreamOfOperations {
+        private final OpDistribution operations;
+        private final RateLimiter rateLimiter;
+        private final WorkManager workManager;
+        public StreamOfOperations(OpDistribution operations, RateLimiter rateLimiter, WorkManager workManager)
+        {
+            this.operations = operations;
+            this.rateLimiter = rateLimiter;
+            this.workManager = workManager;
+        }
+
+        Operation nextOp()
+        {
+            Operation op = operations.next();
+            final int partitionCount = op.ready(workManager);
+            if (partitionCount == 0)
+                return null;
+            if (rateLimiter != null)
+                rateLimiter.acquire(partitionCount);
+            return op;
+        }
+
+        void close()
+        {
+            operations.closeTimers();
+        }
+
+        void abort()
+        {
+            workManager.stop();
+        }
+    }
     private class Consumer extends Thread
     {
-
-        private final OpDistribution operations;
+        private final StreamOfOperations opStream;
         private final StressMetrics metrics;
-        private final RateLimiter rateLimiter;
         private volatile boolean success = true;
-        private final WorkManager workManager;
         private final CountDownLatch done;
 
         public Consumer(OpDistribution operations,
@@ -279,10 +310,8 @@ public class StressAction implements Runnable
                         RateLimiter rateLimiter)
         {
             this.done = done;
-            this.rateLimiter = rateLimiter;
-            this.workManager = workManager;
             this.metrics = metrics;
-            this.operations = operations;
+            this.opStream = new StreamOfOperations(operations, rateLimiter, workManager);
         }
 
         public void run()
@@ -293,7 +322,9 @@ public class StressAction implements Runnable
                 ThriftClient tclient = null;
                 JavaDriverClient jclient = null;
 
-                switch (settings.mode.api)
+
+                final ConnectionAPI clientType = settings.mode.api;
+                switch (clientType)
                 {
                     case JAVA_DRIVER_NATIVE:
                         jclient = settings.getJavaDriverClient();
@@ -311,13 +342,14 @@ public class StressAction implements Runnable
 
                 while (true)
                 {
-                    Operation op = operations.next();
-                    if (!op.ready(workManager, rateLimiter))
+                    // Assumption: All ops are thread local, operations are never shared across threads.
+                    Operation op = opStream.nextOp();
+                    if (op == null)
                         break;
 
                     try
                     {
-                        switch (settings.mode.api)
+                        switch (clientType)
                         {
                             case JAVA_DRIVER_NATIVE:
                                 op.run(jclient);
@@ -339,7 +371,8 @@ public class StressAction implements Runnable
                             e.printStackTrace(output);
 
                         success = false;
-                        workManager.stop();
+                        opStream.abort();
+
                         metrics.cancel();
                         return;
                     }
@@ -353,7 +386,7 @@ public class StressAction implements Runnable
             finally
             {
                 done.countDown();
-                operations.closeTimers();
+                opStream.close();
             }
         }
     }

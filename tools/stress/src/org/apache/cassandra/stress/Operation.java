@@ -48,7 +48,7 @@ public abstract class Operation
         public int rowCount();
     }
 
-    public abstract boolean ready(WorkManager permits, RateLimiter rateLimiter);
+    public abstract int ready(WorkManager permits);
 
     public boolean isWrite()
     {

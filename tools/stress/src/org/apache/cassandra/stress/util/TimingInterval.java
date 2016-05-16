@@ -49,8 +49,8 @@ public final class TimingInterval
     {
         return String.format("Start: %d end: %d maxLatency: %d pauseStart: %d" +
                              " pCount: %d rcount: %d opCount: %d errors: %d",
-                             startNs, endNs, serviceTime.getMaxValue(), pauseStart,
-                             partitionCount, rowCount, serviceTime.getTotalCount(), errorCount);
+                             startNs, endNs, responseTime.getMaxValue(), pauseStart,
+                             partitionCount, rowCount, responseTime.getTotalCount(), errorCount);
     }
 
     TimingInterval(long time)

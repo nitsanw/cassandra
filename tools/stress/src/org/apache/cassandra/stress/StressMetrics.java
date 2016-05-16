@@ -29,11 +29,15 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadFactory;
 
-import org.apache.cassandra.stress.util.*;
-import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.stress.settings.StressSettings;
+import org.apache.cassandra.stress.util.JmxCollector;
+import org.apache.cassandra.stress.util.Timing;
+import org.apache.cassandra.stress.util.TimingInterval;
+import org.apache.cassandra.stress.util.TimingIntervals;
+import org.apache.cassandra.stress.util.Uncertainty;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 
 public class StressMetrics
 {
@@ -55,6 +59,7 @@ public class StressMetrics
     {
         this.output = output;
         this.settings = settings;
+
         Callable<JmxCollector.GcStats> gcStatsCollector;
         totalGcStats = new JmxCollector.GcStats(0);
         try
@@ -78,7 +83,7 @@ public class StressMetrics
             };
         }
         this.gcStatsCollector = gcStatsCollector;
-        this.timing = new Timing(settings.samples.historyCount, settings.samples.reportCount);
+        this.timing = new Timing();
 
         printHeader("", output);
         thread = tf.newThread(new Runnable()
@@ -156,8 +161,8 @@ public class StressMetrics
     {
         Timing.TimingResult<JmxCollector.GcStats> result = timing.snap(gcStatsCollector);
         totalGcStats = JmxCollector.GcStats.aggregate(Arrays.asList(totalGcStats, result.extra));
-        TimingInterval current = result.intervals.combine(settings.samples.reportCount);
-        TimingInterval history = timing.getHistory().combine(settings.samples.historyCount);
+        TimingInterval current = result.intervals.combine();
+        TimingInterval history = timing.getHistory().combine();
         rowRateUncertainty.update(current.adjustedRowRate());
         if (current.operationCount() != 0)
         {
@@ -217,7 +222,7 @@ public class StressMetrics
         output.println("Results:");
 
         TimingIntervals opHistory = timing.getHistory();
-        TimingInterval history = opHistory.combine(settings.samples.historyCount);
+        TimingInterval history = opHistory.combine();
         output.println(String.format("Op rate                   : %,8.0f op/s  %s", history.opRate(), opHistory.opRates()));
         output.println(String.format("Partition rate            : %,8.0f pk/s  %s", history.partitionRate(), opHistory.partitionRates()));
         output.println(String.format("Row rate                  : %,8.0f row/s %s", history.rowRate(), opHistory.rowRates()));
@@ -239,7 +244,7 @@ public class StressMetrics
         output.println(""); // Newline is important here to separate the aggregates section from the END or the next stress iteration
     }
 
-    public static void summarise(List<String> ids, List<StressMetrics> summarise, PrintStream out, int historySampleCount)
+    public static void summarise(List<String> ids, List<StressMetrics> summarise, PrintStream out)
     {
         int idLen = 0;
         for (String id : ids)
@@ -258,7 +263,7 @@ public class StressMetrics
                          summarise.get(i).rowRateUncertainty,
                          out);
             }
-            TimingInterval hist = summarise.get(i).timing.getHistory().combine(historySampleCount);
+            TimingInterval hist = summarise.get(i).timing.getHistory().combine();
             printRow(String.format(formatstr, ids.get(i)),
                     "total",
                     hist,

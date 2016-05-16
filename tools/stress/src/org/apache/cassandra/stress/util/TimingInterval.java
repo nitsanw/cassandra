@@ -78,7 +78,7 @@ public final class TimingInterval
     }
 
     // merge multiple timer intervals together
-    static TimingInterval merge(Iterable<TimingInterval> intervals, int maxSamples, long start)
+    static TimingInterval merge(Iterable<TimingInterval> intervals, long start)
     {
         long partitionCount = 0, rowCount = 0, errorCount = 0;
         long end = 0;

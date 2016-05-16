@@ -170,7 +170,7 @@ public class StressAction implements Runnable
         } while (!auto || (hasAverageImprovement(results, 3, 0) && hasAverageImprovement(results, 5, settings.command.targetUncertainty)));
 
         // summarise all results
-        StressMetrics.summarise(runIds, results, output, settings.samples.historyCount);
+        StressMetrics.summarise(runIds, results, output);
         return true;
     }
 

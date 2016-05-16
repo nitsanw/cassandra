@@ -38,14 +38,10 @@ public class Timing
     // Probably the CopyOnWriteArrayList could be changed to an ordinary list as well.
     private final Map<String, List<Timer>> timers = new TreeMap<>();
     private volatile TimingIntervals history;
-    private final int historySampleCount;
-    private final int reportSampleCount;
     private boolean done;
 
-    public Timing(int historySampleCount, int reportSampleCount)
+    public Timing()
     {
-        this.historySampleCount = historySampleCount;
-        this.reportSampleCount = reportSampleCount;
     }
 
     // TIMING
@@ -111,13 +107,13 @@ public class Timing
                 done &= !timer.running();
             }
 
-            intervals.put(entry.getKey(), TimingInterval.merge(operationIntervals, reportSampleCount,
+            intervals.put(entry.getKey(), TimingInterval.merge(operationIntervals,
                                                               history.get(entry.getKey()).endNanos()));
         }
 
         TimingIntervals result = new TimingIntervals(intervals);
         this.done = done;
-        history = history.merge(result, historySampleCount, history.startNanos());
+        history = history.merge(result, history.startNanos());
         return new TimingResult<>(extra, result);
     }
 

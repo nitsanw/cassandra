@@ -95,7 +95,7 @@ public final class TimingInterval
                 rowCount += interval.rowCount;
                 errorCount += interval.errorCount;
 
-                if (interval.serviceTime.getMaxValue() > serviceTime.getMaxValue())
+                if (interval.getLatencyHistogram().getMaxValue() > serviceTime.getMaxValue())
                 {
                     pauseStart = interval.pauseStart;
                 }
@@ -113,12 +113,12 @@ public final class TimingInterval
 
     public double opRate()
     {
-        return serviceTime.getTotalCount() / ((endNs - startNs) * 0.000000001d);
+        return getLatencyHistogram().getTotalCount() / ((endNs - startNs) * 0.000000001d);
     }
 
     public double adjustedRowRate()
     {
-        return rowCount / ((endNs - (startNs + serviceTime.getMaxValue())) * 0.000000001d);
+        return rowCount / ((endNs - (startNs + getLatencyHistogram().getMaxValue())) * 0.000000001d);
     }
 
     public double partitionRate()
@@ -133,17 +133,25 @@ public final class TimingInterval
 
     public double meanLatencyMs()
     {
-        return serviceTime.getMean() * 0.000001d;
+        return getLatencyHistogram().getMean() * 0.000001d;
+    }
+
+    private Histogram getLatencyHistogram()
+    {
+        if (responseTime.getTotalCount() == 0)
+            return serviceTime;
+        else
+            return responseTime;
     }
 
     public double maxLatencyMs()
     {
-        return serviceTime.getMaxValue() * 0.000001d;
+        return getLatencyHistogram().getMaxValue() * 0.000001d;
     }
 
     public double medianLatencyMs()
     {
-        return serviceTime.getValueAtPercentile(50.0) * 0.000001d;
+        return getLatencyHistogram().getValueAtPercentile(50.0) * 0.000001d;
     }
 
 
@@ -153,7 +161,7 @@ public final class TimingInterval
      */
     public double latencyAtPercentileMs(double percentile)
     {
-        return serviceTime.getValueAtPercentile(percentile) * 0.000001d;
+        return getLatencyHistogram().getValueAtPercentile(percentile) * 0.000001d;
     }
 
     public long runTimeMs()
@@ -202,7 +210,7 @@ public final class TimingInterval
 
     public long operationCount()
     {
-        return serviceTime.getTotalCount();
+        return getLatencyHistogram().getTotalCount();
     }
  }
 

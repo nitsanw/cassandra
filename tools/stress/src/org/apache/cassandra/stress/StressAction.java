@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 
 import org.apache.cassandra.stress.operations.OpDistribution;
 import org.apache.cassandra.stress.operations.OpDistributionFactory;
@@ -34,7 +36,6 @@ import org.apache.cassandra.stress.util.JavaDriverClient;
 import org.apache.cassandra.stress.util.ThriftClient;
 import org.apache.cassandra.transport.SimpleClient;
 
-import com.google.common.util.concurrent.RateLimiter;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 public class StressAction implements Runnable
@@ -64,9 +65,9 @@ public class StressAction implements Runnable
             settings.command.truncateTables(settings);
 
         // TODO : move this to a new queue wrapper that gates progress based on a poisson (or configurable) distribution
-        RateLimiter rateLimiter = null;
+        UniformRateLimiter rateLimiter = null;
         if (settings.rate.opRateTargetPerSecond > 0)
-            rateLimiter = RateLimiter.create(settings.rate.opRateTargetPerSecond);
+            rateLimiter = new UniformRateLimiter(settings.rate.opRateTargetPerSecond);
 
         boolean success;
         if (settings.rate.minThreads > 0)
@@ -87,6 +88,7 @@ public class StressAction implements Runnable
     }
 
     // type provided separately to support recursive call for mixed command with each command type it is performing
+    @SuppressWarnings("resource") // warmupOutput doesn't need closing
     private void warmup(OpDistributionFactory operations)
     {
         PrintStream warmupOutput = new PrintStream(new OutputStream() { @Override public void write(int b) throws IOException { } } );
@@ -115,7 +117,7 @@ public class StressAction implements Runnable
 
     // TODO : permit varying more than just thread count
     // TODO : vary thread count based on percentage improvement of previous increment, not by fixed amounts
-    private boolean runMulti(boolean auto, RateLimiter rateLimiter)
+    private boolean runMulti(boolean auto, UniformRateLimiter rateLimiter)
     {
         if (settings.command.targetUncertainty >= 0)
             output.println("WARNING: uncertainty mode (err<) results in uneven workload between thread runs, so should be used for high level analysis only");
@@ -193,7 +195,7 @@ public class StressAction implements Runnable
                               int threadCount,
                               long opCount,
                               long duration,
-                              RateLimiter rateLimiter,
+                              UniformRateLimiter rateLimiter,
                               TimeUnit durationUnits,
                               PrintStream output,
                               boolean isWarmup)
@@ -264,11 +266,28 @@ public class StressAction implements Runnable
         return metrics;
     }
 
+    private static class UniformRateLimiter {
+        final long start = System.nanoTime();
+        final long intervalNs;
+        final AtomicLong opIndex = new AtomicLong();
+        UniformRateLimiter(int opsPerSec) {
+            intervalNs = 1000000000 / opsPerSec;
+        }
+
+        /**
+         * @param partitionCount
+         * @return expect start time in ns for the operation
+         */
+        long acquire(int partitionCount) {
+            long currOpIndex = opIndex.getAndAdd(partitionCount);
+            return start + currOpIndex * intervalNs;
+        }
+    }
     private static class StreamOfOperations {
         private final OpDistribution operations;
-        private final RateLimiter rateLimiter;
+        private final UniformRateLimiter rateLimiter;
         private final WorkManager workManager;
-        public StreamOfOperations(OpDistribution operations, RateLimiter rateLimiter, WorkManager workManager)
+        public StreamOfOperations(OpDistribution operations, UniformRateLimiter rateLimiter, WorkManager workManager)
         {
             this.operations = operations;
             this.rateLimiter = rateLimiter;
@@ -281,8 +300,14 @@ public class StressAction implements Runnable
             final int partitionCount = op.ready(workManager);
             if (partitionCount == 0)
                 return null;
-            if (rateLimiter != null)
-                rateLimiter.acquire(partitionCount);
+            if (rateLimiter != null) {
+                long intendedTime = rateLimiter.acquire(partitionCount);
+                op.intendedStartNs(intendedTime);
+                long now;
+                while ((now = System.nanoTime()) < intendedTime) {
+                    LockSupport.parkNanos(intendedTime - now);
+                }
+            }
             return op;
         }
 
@@ -307,7 +332,7 @@ public class StressAction implements Runnable
                         CountDownLatch done,
                         WorkManager workManager,
                         StressMetrics metrics,
-                        RateLimiter rateLimiter)
+                        UniformRateLimiter rateLimiter)
         {
             this.done = done;
             this.metrics = metrics;

@@ -70,7 +70,7 @@ public final class Timer
         {
             long rTime = endTimeNs - intendedTimeNs;
             responseTime.recordValue(rTime);
-            long wTime = intendedTimeNs - startTimeNs;
+            long wTime = startTimeNs - intendedTimeNs;
             waitTime.recordValue(wTime);
         }
 

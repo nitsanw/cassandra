@@ -143,4 +143,9 @@ public abstract class Operation
     {
         timer.close();
     }
+
+    public void intendedStartNs(long intendedTime)
+    {
+        timer.intendedTimeNs(intendedTime);
+    }
 }

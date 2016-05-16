@@ -28,9 +28,9 @@ import org.HdrHistogram.Histogram;
 // a timer - this timer must be used by a single thread, and co-ordinates with other timers by
 public final class Timer
 {
-    private final Histogram responseTime = new Histogram(3);
-    private final Histogram serviceTime = new Histogram(3);
-    private final Histogram waitTime = new Histogram(3);
+    private Histogram responseTime = new Histogram(3);
+    private Histogram serviceTime = new Histogram(3);
+    private Histogram waitTime = new Histogram(3);
 
     // event timing info
     private long intendedTimeNs;
@@ -105,6 +105,9 @@ public final class Timer
         max = 0;
         errorCount = 0;
         lastSnap = upToDateAsOf;
+        responseTime = new Histogram(3);
+        serviceTime = new Histogram(3);
+        waitTime = new Histogram(3);
 
         return report;
     }

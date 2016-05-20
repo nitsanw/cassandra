@@ -21,6 +21,9 @@ package org.apache.cassandra.stress;
  */
 
 
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+
+import java.io.FileNotFoundException;
 import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.List;
@@ -28,7 +31,10 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
+import org.HdrHistogram.Histogram;
+import org.HdrHistogram.HistogramLogWriter;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.stress.settings.StressSettings;
 import org.apache.cassandra.stress.util.JmxCollector;
@@ -42,24 +48,43 @@ import org.apache.commons.lang3.time.DurationFormatUtils;
 public class StressMetrics
 {
 
-    private static final ThreadFactory tf = new NamedThreadFactory("StressMetrics");
-
     private final PrintStream output;
     private final Thread thread;
-    private volatile boolean stop = false;
-    private volatile boolean cancelled = false;
     private final Uncertainty rowRateUncertainty = new Uncertainty();
     private final CountDownLatch stopped = new CountDownLatch(1);
     private final Timing timing;
     private final Callable<JmxCollector.GcStats> gcStatsCollector;
+    private final HistogramLogWriter histogramWriter;
+    private final long epochNs = System.nanoTime();
+    private final long epochMs = System.currentTimeMillis();
+
     private volatile JmxCollector.GcStats totalGcStats;
-    private final StressSettings settings;
+
+    private volatile boolean stop = false;
+    private volatile boolean cancelled = false;
 
     public StressMetrics(PrintStream output, final long logIntervalMillis, StressSettings settings)
     {
         this.output = output;
-        this.settings = settings;
-
+        if(settings.log.hdrFile != null)
+        {
+            try
+            {
+                histogramWriter = new HistogramLogWriter(settings.log.hdrFile);
+                histogramWriter.outputComment("Logging op latencuies for Cassandra Stress");
+                histogramWriter.outputLogFormatVersion();
+                histogramWriter.outputBaseTime(epochMs);
+                histogramWriter.outputStartTime(epochMs);
+            }
+            catch (FileNotFoundException e)
+            {
+                throw new IllegalArgumentException(e);
+            }
+        }
+        else
+        {
+            histogramWriter = null;
+        }
         Callable<JmxCollector.GcStats> gcStatsCollector;
         totalGcStats = new JmxCollector.GcStats(0);
         try
@@ -86,7 +111,7 @@ public class StressMetrics
         this.timing = new Timing();
 
         printHeader("", output);
-        thread = tf.newThread(new Runnable()
+        thread = new Thread(new Runnable()
         {
             @Override
             public void run()
@@ -130,6 +155,7 @@ public class StressMetrics
                 }
             }
         });
+        thread.setName("StressMetrics");
     }
 
     public void start()
@@ -169,13 +195,41 @@ public class StressMetrics
             if (result.intervals.intervals().size() > 1)
             {
                 for (Map.Entry<String, TimingInterval> type : result.intervals.intervals().entrySet())
-                    printRow("", type.getKey(), type.getValue(), timing.getHistory().get(type.getKey()), result.extra, rowRateUncertainty, output);
+                {
+                    final String opName = type.getKey();
+                    final TimingInterval opInterval = type.getValue();
+                    printRow("", opName, opInterval, timing.getHistory().get(type.getKey()), result.extra, rowRateUncertainty, output);
+                    logHistograms(opName, opInterval);
+                }
             }
 
             printRow("", "total", current, history, result.extra, rowRateUncertainty, output);
         }
         if (timing.done())
             stop = true;
+    }
+
+
+    private void logHistograms(String opName, TimingInterval opInterval)
+    {
+        if (histogramWriter == null)
+            return;
+        final long startNs = opInterval.startNanos();
+        final long endNs = opInterval.endNanos();
+
+        logHistogram(opName + "-st", startNs, endNs, opInterval.serviceTime());
+        logHistogram(opName + "-rt", startNs, endNs, opInterval.responseTime());
+        logHistogram(opName + "-wt", startNs, endNs, opInterval.waitTime());
+    }
+
+    private void logHistogram(String opName, final long startNs, final long endNs, final Histogram histogram)
+    {
+        if (histogram.getTotalCount() != 0) {
+            histogram.setTag(opName);
+            histogram.setStartTimeStamp(epochMs + NANOSECONDS.toMillis(startNs - epochNs));
+            histogram.setEndTimeStamp(epochMs + NANOSECONDS.toMillis(endNs - epochNs));
+            histogramWriter.outputIntervalHistogram(histogram);
+        }
     }
 
 

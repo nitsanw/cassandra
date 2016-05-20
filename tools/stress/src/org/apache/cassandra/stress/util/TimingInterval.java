@@ -20,9 +20,6 @@ package org.apache.cassandra.stress.util;
  *
  */
 
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-
 import org.HdrHistogram.Histogram;
 
 // represents measurements taken over an interval of time
@@ -169,7 +166,7 @@ public final class TimingInterval
         return (endNs - startNs) / 1000000;
     }
 
-    public final long endNanos()
+    public long endNanos()
     {
         return endNs;
     }
@@ -177,6 +174,21 @@ public final class TimingInterval
     public long startNanos()
     {
         return startNs;
+    }
+
+    public Histogram responseTime()
+    {
+        return responseTime;
+    }
+
+    public Histogram serviceTime()
+    {
+        return serviceTime;
+    }
+
+    public Histogram waitTime()
+    {
+        return waitTime;
     }
 
     public static enum TimingParameter

@@ -74,7 +74,9 @@ public class StressMetrics
                 histogramWriter.outputComment("Logging op latencuies for Cassandra Stress");
                 histogramWriter.outputLogFormatVersion();
                 histogramWriter.outputBaseTime(epochMs);
+                histogramWriter.setBaseTime(epochMs);
                 histogramWriter.outputStartTime(epochMs);
+                histogramWriter.outputLegend();
             }
             catch (FileNotFoundException e)
             {

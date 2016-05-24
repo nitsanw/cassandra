@@ -43,7 +43,7 @@ public class StressAction implements Runnable
 
     private final StressSettings settings;
     private final PrintStream output;
-
+    
     public StressAction(StressSettings settings, PrintStream out)
     {
         this.settings = settings;
@@ -214,17 +214,36 @@ public class StressAction implements Runnable
 
         final StressMetrics metrics = new StressMetrics(output, settings.log.intervalMillis, settings);
 
+        final CountDownLatch releaseConsumers = new CountDownLatch(1);
+        final CountDownLatch start = new CountDownLatch(threadCount);
         final CountDownLatch done = new CountDownLatch(threadCount);
         final Consumer[] consumers = new Consumer[threadCount];
         for (int i = 0; i < threadCount; i++)
         {
             consumers[i] = new Consumer(operations.get(metrics.getTiming(), isWarmup),
-                                        done, workManager, metrics, rateLimiter);
+                                        done, start, releaseConsumers, workManager, metrics, rateLimiter);
         }
 
         // starting worker threadCount
         for (int i = 0; i < threadCount; i++)
             consumers[i].start();
+
+        // wait for the lot of them to get their pants on
+        try
+        {
+            start.await();
+        }
+        catch (InterruptedException e)
+        {
+            throw new RuntimeException("Unexpected interruption", e);
+        }
+        
+        // start counting from NOW!
+        if (rateLimiter != null)
+            rateLimiter.start();
+            
+        // release the hounds!!!
+        releaseConsumers.countDown();
 
         metrics.start();
 
@@ -272,13 +291,18 @@ public class StressAction implements Runnable
      */
     private static class UniformRateLimiter
     {
-        final long start = System.nanoTime();
+        long start = Long.MIN_VALUE;
         final long intervalNs;
         final AtomicLong opIndex = new AtomicLong();
 
         UniformRateLimiter(int opsPerSec)
         {
             intervalNs = 1000000000 / opsPerSec;
+        }
+
+        void start()
+        {
+            start = System.nanoTime();
         }
 
         /**
@@ -349,14 +373,20 @@ public class StressAction implements Runnable
         private final StressMetrics metrics;
         private volatile boolean success = true;
         private final CountDownLatch done;
+        private final CountDownLatch start;
+        private final CountDownLatch releaseConsumers;
 
         public Consumer(OpDistribution operations,
                         CountDownLatch done,
+                        CountDownLatch start,
+                        CountDownLatch releaseConsumers,
                         WorkManager workManager,
                         StressMetrics metrics,
                         UniformRateLimiter rateLimiter)
         {
             this.done = done;
+            this.start = start;
+            this.releaseConsumers = releaseConsumers;
             this.metrics = metrics;
             this.opStream = new StreamOfOperations(operations, rateLimiter, workManager);
         }
@@ -386,6 +416,10 @@ public class StressAction implements Runnable
                     default:
                         throw new IllegalStateException();
                 }
+
+                // synchronize the start of all the consumer threads
+                start.countDown();
+                releaseConsumers.await();
 
                 while (true)
                 {

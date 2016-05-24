@@ -266,10 +266,16 @@ public class StressAction implements Runnable
         return metrics;
     }
 
-    private static class UniformRateLimiter {
+    /**
+     * Provides a 'next operation time' for rate limited operation streams. The rate limiter is thread safe and is to be
+     * shared by all consumer threads.
+     */
+    private static class UniformRateLimiter
+    {
         final long start = System.nanoTime();
         final long intervalNs;
         final AtomicLong opIndex = new AtomicLong();
+
         UniformRateLimiter(int opsPerSec)
         {
             intervalNs = 1000000000 / opsPerSec;
@@ -285,11 +291,16 @@ public class StressAction implements Runnable
             return start + currOpIndex * intervalNs;
         }
     }
+
+    /**
+     * Provides a blocking stream of operations per consumer.
+     */
     private static class StreamOfOperations
     {
         private final OpDistribution operations;
         private final UniformRateLimiter rateLimiter;
         private final WorkManager workManager;
+
         public StreamOfOperations(OpDistribution operations, UniformRateLimiter rateLimiter, WorkManager workManager)
         {
             this.operations = operations;
@@ -297,6 +308,11 @@ public class StressAction implements Runnable
             this.workManager = workManager;
         }
 
+        /**
+         * This method will block until the next operation becomes available.
+         *
+         * @return next operation or null if no more ops are coming
+         */
         Operation nextOp()
         {
             Operation op = operations.next();
@@ -326,6 +342,7 @@ public class StressAction implements Runnable
             workManager.stop();
         }
     }
+
     private class Consumer extends Thread
     {
         private final StreamOfOperations opStream;

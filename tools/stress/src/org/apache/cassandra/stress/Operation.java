@@ -108,6 +108,7 @@ public abstract class Operation
                 exceptionMessage = getExceptionMessage(e);
             }
         }
+        
         timer.stop(run.partitionCount(), run.rowCount(), !success);
 
         if (!success)

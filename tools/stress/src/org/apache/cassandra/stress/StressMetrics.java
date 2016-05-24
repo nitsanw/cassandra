@@ -226,7 +226,8 @@ public class StressMetrics
 
     private void logHistogram(String opName, final long startNs, final long endNs, final Histogram histogram)
     {
-        if (histogram.getTotalCount() != 0) {
+        if (histogram.getTotalCount() != 0)
+        {
             histogram.setTag(opName);
             histogram.setStartTimeStamp(epochMs + NANOSECONDS.toMillis(startNs - epochNs));
             histogram.setEndTimeStamp(epochMs + NANOSECONDS.toMillis(endNs - epochNs));

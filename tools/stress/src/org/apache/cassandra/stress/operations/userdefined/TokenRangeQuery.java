@@ -256,8 +256,6 @@ public class TokenRangeQuery extends Operation
             return 0;
 
         int numLeft = workManager.takePermits(1);
-//        if (rateLimiter != null && numLeft > 0 )
-//            rateLimiter.acquire(numLeft);
 
         return numLeft > 0 ? 1 : 0;
     }

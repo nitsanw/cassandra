@@ -270,7 +270,8 @@ public class StressAction implements Runnable
         final long start = System.nanoTime();
         final long intervalNs;
         final AtomicLong opIndex = new AtomicLong();
-        UniformRateLimiter(int opsPerSec) {
+        UniformRateLimiter(int opsPerSec)
+        {
             intervalNs = 1000000000 / opsPerSec;
         }
 
@@ -278,12 +279,14 @@ public class StressAction implements Runnable
          * @param partitionCount
          * @return expect start time in ns for the operation
          */
-        long acquire(int partitionCount) {
+        long acquire(int partitionCount)
+        {
             long currOpIndex = opIndex.getAndAdd(partitionCount);
             return start + currOpIndex * intervalNs;
         }
     }
-    private static class StreamOfOperations {
+    private static class StreamOfOperations
+    {
         private final OpDistribution operations;
         private final UniformRateLimiter rateLimiter;
         private final WorkManager workManager;
@@ -300,11 +303,13 @@ public class StressAction implements Runnable
             final int partitionCount = op.ready(workManager);
             if (partitionCount == 0)
                 return null;
-            if (rateLimiter != null) {
+            if (rateLimiter != null)
+            {
                 long intendedTime = rateLimiter.acquire(partitionCount);
                 op.intendedStartNs(intendedTime);
                 long now;
-                while ((now = System.nanoTime()) < intendedTime) {
+                while ((now = System.nanoTime()) < intendedTime)
+                {
                     LockSupport.parkNanos(intendedTime - now);
                 }
             }
@@ -397,7 +402,6 @@ public class StressAction implements Runnable
 
                         success = false;
                         opStream.abort();
-
                         metrics.cancel();
                         return;
                     }

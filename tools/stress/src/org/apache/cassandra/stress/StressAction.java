@@ -43,7 +43,6 @@ public class StressAction implements Runnable
 
     private final StressSettings settings;
     private final PrintStream output;
-    
     public StressAction(StressSettings settings, PrintStream out)
     {
         this.settings = settings;
@@ -215,8 +214,8 @@ public class StressAction implements Runnable
         final StressMetrics metrics = new StressMetrics(output, settings.log.intervalMillis, settings);
 
         final CountDownLatch releaseConsumers = new CountDownLatch(1);
-        final CountDownLatch start = new CountDownLatch(threadCount);
         final CountDownLatch done = new CountDownLatch(threadCount);
+        final CountDownLatch start = new CountDownLatch(threadCount);
         final Consumer[] consumers = new Consumer[threadCount];
         for (int i = 0; i < threadCount; i++)
         {
@@ -237,11 +236,9 @@ public class StressAction implements Runnable
         {
             throw new RuntimeException("Unexpected interruption", e);
         }
-        
         // start counting from NOW!
-        if (rateLimiter != null)
+        if(rateLimiter != null)
             rateLimiter.start();
-            
         // release the hounds!!!
         releaseConsumers.countDown();
 
@@ -419,6 +416,7 @@ public class StressAction implements Runnable
 
                 // synchronize the start of all the consumer threads
                 start.countDown();
+
                 releaseConsumers.await();
 
                 while (true)

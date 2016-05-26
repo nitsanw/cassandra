@@ -65,8 +65,8 @@ public class StressAction implements Runnable
 
         // TODO : move this to a new queue wrapper that gates progress based on a poisson (or configurable) distribution
         UniformRateLimiter rateLimiter = null;
-        if (settings.rate.opRateTargetPerSecond > 0)
-            rateLimiter = new UniformRateLimiter(settings.rate.opRateTargetPerSecond);
+        if (settings.rate.opsPerSecond > 0)
+            rateLimiter = new UniformRateLimiter(settings.rate.opsPerSecond);
 
         boolean success;
         if (settings.rate.minThreads > 0)

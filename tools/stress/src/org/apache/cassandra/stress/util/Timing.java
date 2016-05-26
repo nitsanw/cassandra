@@ -39,9 +39,11 @@ public class Timing
     private final Map<String, List<Timer>> timers = new TreeMap<>();
     private volatile TimingIntervals history;
     private boolean done;
+    private boolean isFixed;
 
-    public Timing()
+    public Timing(boolean isFixed)
     {
+        this.isFixed = isFixed;
     }
 
     // TIMING
@@ -120,7 +122,7 @@ public class Timing
     // build a new timer and add it to the set of running timers.
     public Timer newTimer(String opType)
     {
-        final Timer timer = new Timer();
+        final Timer timer = new Timer(isFixed);
 
         if (!timers.containsKey(opType))
             timers.put(opType, new ArrayList<Timer>());

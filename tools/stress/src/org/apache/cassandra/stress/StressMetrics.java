@@ -30,12 +30,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.HistogramLogWriter;
-import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.stress.settings.StressSettings;
 import org.apache.cassandra.stress.util.JmxCollector;
 import org.apache.cassandra.stress.util.Timing;
@@ -71,7 +68,7 @@ public class StressMetrics
             try
             {
                 histogramWriter = new HistogramLogWriter(settings.log.hdrFile);
-                histogramWriter.outputComment("Logging op latencuies for Cassandra Stress");
+                histogramWriter.outputComment("Logging op latencies for Cassandra Stress");
                 histogramWriter.outputLogFormatVersion();
                 histogramWriter.outputBaseTime(epochMs);
                 histogramWriter.setBaseTime(epochMs);
@@ -110,7 +107,7 @@ public class StressMetrics
             };
         }
         this.gcStatsCollector = gcStatsCollector;
-        this.timing = new Timing();
+        this.timing = new Timing(settings.rate.isFixed);
 
         printHeader("", output);
         thread = new Thread(new Runnable()

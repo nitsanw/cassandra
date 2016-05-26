@@ -51,9 +51,11 @@ public final class Timer
     private volatile CountDownLatch reportRequest;
     volatile TimingInterval report;
     private volatile TimingInterval finalReport;
+    private final boolean isFixed;
 
-    public Timer()
+    public Timer(boolean isFixed)
     {
+        this.isFixed = isFixed;
     }
 
     public boolean running()
@@ -98,7 +100,7 @@ public final class Timer
     private TimingInterval buildReport()
     {
         final TimingInterval report = new TimingInterval(lastSnap, upToDateAsOf, maxStart, partitionCount,
-                rowCount, errorCount, responseTime, serviceTime, waitTime);
+                rowCount, errorCount, responseTime, serviceTime, waitTime, isFixed);
         // reset counters
         partitionCount = 0;
         rowCount = 0;

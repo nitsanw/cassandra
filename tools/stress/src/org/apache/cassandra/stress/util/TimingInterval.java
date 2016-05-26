@@ -40,14 +40,15 @@ public final class TimingInterval
     public final long partitionCount;
     public final long rowCount;
     public final long errorCount;
+    public final boolean isFixed;
 
 
     public String toString()
     {
         return String.format("Start: %d end: %d maxLatency: %d pauseStart: %d" +
                              " pCount: %d rcount: %d opCount: %d errors: %d",
-                             startNs, endNs, responseTime.getMaxValue(), pauseStart,
-                             partitionCount, rowCount, responseTime.getTotalCount(), errorCount);
+                             startNs, endNs, getLatencyHistogram().getMaxValue(), pauseStart,
+                             partitionCount, rowCount, getLatencyHistogram().getTotalCount(), errorCount);
     }
 
     TimingInterval(long time)
@@ -58,10 +59,11 @@ public final class TimingInterval
         responseTime = new Histogram(3);
         serviceTime = new Histogram(3);
         waitTime = new Histogram(3);
+        isFixed = false;
     }
 
     TimingInterval(long start, long end, long maxPauseStart, long partitionCount,
-                   long rowCount, long errorCount, Histogram r, Histogram s, Histogram w)
+                   long rowCount, long errorCount, Histogram r, Histogram s, Histogram w, boolean isFixed)
     {
         this.startNs = start;
         this.endNs = Math.max(end, start);
@@ -72,6 +74,8 @@ public final class TimingInterval
         this.responseTime = r;
         this.serviceTime = s;
         this.waitTime = w;
+        this.isFixed = isFixed;
+
     }
 
     // merge multiple timer intervals together
@@ -83,6 +87,7 @@ public final class TimingInterval
         Histogram responseTime = new Histogram(3);
         Histogram serviceTime = new Histogram(3);
         Histogram waitTime = new Histogram(3);
+        boolean isFixed = false;
         for (TimingInterval interval : intervals)
         {
             if (interval != null)
@@ -99,12 +104,13 @@ public final class TimingInterval
                 responseTime.add(interval.responseTime);
                 serviceTime.add(interval.serviceTime);
                 waitTime.add(interval.waitTime);
+                isFixed |= interval.isFixed;
             }
         }
 
 
         return new TimingInterval(start, end, pauseStart, partitionCount, rowCount,
-                                  errorCount, responseTime, serviceTime, waitTime);
+                                  errorCount, responseTime, serviceTime, waitTime, isFixed);
 
     }
 
@@ -131,14 +137,6 @@ public final class TimingInterval
     public double meanLatencyMs()
     {
         return getLatencyHistogram().getMean() * 0.000001d;
-    }
-
-    private Histogram getLatencyHistogram()
-    {
-        if (responseTime.getTotalCount() == 0)
-            return serviceTime;
-        else
-            return responseTime;
     }
 
     public double maxLatencyMs()
@@ -189,6 +187,14 @@ public final class TimingInterval
     public Histogram waitTime()
     {
         return waitTime;
+    }
+
+    private Histogram getLatencyHistogram()
+    {
+        if (!isFixed || responseTime.getTotalCount() == 0)
+            return serviceTime;
+        else
+            return responseTime;
     }
 
     public static enum TimingParameter
